@@ -1,9 +1,8 @@
-var AgileLottery = artifacts.require("./AgileLottery.sol");
-//import assertRevert from './helpers/assertRevert';
+var TokenExchange = artifacts.require("./TokenExchange.sol");
 
 var contractSL;
 
-contract('AgileLottery', (accounts) => {
+contract('TokenExchange', (accounts) => {
     var owner = accounts[0]; // for test
     var decimal = Number(1e18)  ;
 
@@ -12,20 +11,14 @@ contract('AgileLottery', (accounts) => {
     var buyEthThree = Number(0.5*decimal);
     var buyEthFor = Number(0.01*decimal);
 
-    it('should deployed contract AgileLottery', async ()  => {
+    it('should deployed contract TokenExchange', async ()  => {
         assert.equal(undefined, contractSL);
-        contractSL = await AgileLottery.deployed();
+        contractSL = await TokenExchange.deployed();
         assert.notEqual(undefined, contractSL);
     });
 
     it('get address contract', async ()  => {
         assert.notEqual(undefined, contractSL.address);
-    });
-
-    it('check make lottery', async ()  => {
-        await contractSL.makeNewLottery(accounts[1], 1, {from:accounts[1]});
-        await contractSL.makeNewLottery(accounts[2], 2, {from:accounts[2]});
-        var uniquePlayer = await contractSL.uniquePlayer();
     });
 
 

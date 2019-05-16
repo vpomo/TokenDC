@@ -1,6 +1,6 @@
-const Token = artifacts.require('./Token.sol');
+const TokenExchange = artifacts.require('./TokenExchange.sol');
 
 module.exports = (deployer) => {
     //http://www.onlineconversion.com/unix_time.htm
-    deployer.deploy(Token);
+    deployer.deploy(TokenExchange);
 };

@@ -70,7 +70,7 @@ library SafeMath {
  * functions, this simplifies the implementation of "user permissions".
  */
 contract Ownable {
-    address private _owner;
+    address payable private _owner;
 
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
@@ -78,7 +78,7 @@ contract Ownable {
      * @dev The Ownable constructor sets the original `owner` of the contract to the sender
      * account.
      */
-    constructor (address newOwner) public {
+    constructor (address payable newOwner) public {
         _owner = newOwner;
         _owner = msg.sender; //for Test's
         emit OwnershipTransferred(address(0), _owner);
@@ -87,7 +87,7 @@ contract Ownable {
     /**
      * @return the address of the owner.
      */
-    function owner() public view returns (address) {
+    function owner() public view returns (address payable) {
         return _owner;
     }
 
@@ -130,7 +130,7 @@ contract Ownable {
      * @dev Transfers control of the contract to a newOwner.
      * @param newOwner The address to transfer ownership to.
      */
-    function _transferOwnership(address newOwner) internal {
+    function _transferOwnership(address payable newOwner) internal {
         require(newOwner != address(0), "Ownable: new owner is the zero address");
         emit OwnershipTransferred(_owner, newOwner);
         _owner = newOwner;
@@ -249,7 +249,7 @@ contract ERC20 is IERC20 {
      * approve should be called when _allowances[msg.sender][spender] == 0. To increment
      * allowed value is better to use this function to avoid 2 calls (and wait until
      * the first transaction is mined)
-     * From MonolithDAO Token.sol
+     * From MonolithDAO TokenExchange.sol
      * Emits an Approval event.
      * @param spender The address which will spend the funds.
      * @param addedValue The amount of tokens to increase the allowance by.
@@ -264,7 +264,7 @@ contract ERC20 is IERC20 {
      * approve should be called when _allowances[msg.sender][spender] == 0. To decrement
      * allowed value is better to use this function to avoid 2 calls (and wait until
      * the first transaction is mined)
-     * From MonolithDAO Token.sol
+     * From MonolithDAO TokenExchange.sol
      * Emits an Approval event.
      * @param spender The address which will spend the funds.
      * @param subtractedValue The amount of tokens to decrease the allowance by.
@@ -357,7 +357,7 @@ contract ERC20Detailed is IERC20 {
     }
 }
 
-contract Token is ERC20, ERC20Detailed {
+contract Token is ERC20, ERC20Detailed, Ownable {
     using SafeMath for uint256;
 
     uint8 public constant DECIMALS = 4;
@@ -377,7 +377,7 @@ contract Token is ERC20, ERC20Detailed {
     }
 
     function transferFromOwner(address _owner, address _account, uint256 _value) internal {
-        require(account != address(0), "ERC20: transfer to the zero address");
+        require(_account != address(0), "ERC20: transfer to the zero address");
         require(balanceOf(_owner) >= balanceOf(_account), "owner balance less account balance");
 
         _transfer(_owner, _account, _value);
@@ -395,7 +395,8 @@ contract Token is ERC20, ERC20Detailed {
      * Claim tokens
      */
     function claimTokens(address _token) public onlyOwner {
-        if (_token == 0x0) {
+        if (_token == address(0)) {
+            address payable owner = owner();
             owner.transfer(address(this).balance);
             return;
         }
@@ -413,7 +414,8 @@ contract TokenExchange is Ownable, Token {
     uint256 public rateToken  = 600;
     uint256 private _totalTokenSold;
 
-    event TokenPurchase(address indexed beneficiary, uint256 value, uint256 amount);
+    event TokenPurchase(address indexed beneficiary, uint256 valueEth, uint256 amountToken);
+    event TokenSell(address indexed seller, uint256 valueToken, uint256 amountEth);
     event TokenLimitReached(address indexed buyer, uint256 totalTokenSold, uint256 purchasedToken);
     event WeiLimitReached(address indexed seller, uint256 balanceContract, uint256 weiAmount);
 
@@ -450,21 +452,21 @@ contract TokenExchange is Ownable, Token {
     }
 
     function sellTokens(address _seller, uint256 _tokens) public returns (uint256){
-        require(_buyer != address(0));
+        require(_seller != address(0));
         require(balanceOf(msg.sender) >= _tokens);
 
-        uint256 weiAmount = validSellTokens(weiAmount);
+        uint256 weiAmount = validSellTokens(_tokens);
         if (weiAmount == 0) {revert();}
-        _totalTokenSold = _totalTokenSold.sub(tokens);
-        transferToOwner(_buyer, owner(), _tokens);
+        _totalTokenSold = _totalTokenSold.sub(_tokens);
+        transferToOwner(_seller, owner(), _tokens);
         msg.sender.transfer(weiAmount);
 
-        emit TokenSell(_seller, weiAmount, _tokens);
-        return tokens;
+        emit TokenSell(_seller, _tokens, weiAmount);
+        return weiAmount;
     }
 
     function validPurchaseTokens(uint256 _weiAmount) internal returns (uint256) {
-        uint256 addTokens = _weiAmount.mul().div(rateToken);
+        uint256 addTokens = _weiAmount.mul(rateToken).mul(10 ** uint256(DECIMALS)).div(10**18);
         if (_totalTokenSold.add(addTokens) > totalSupply()) {
             emit TokenLimitReached(msg.sender, _totalTokenSold, addTokens);
             return 0;
