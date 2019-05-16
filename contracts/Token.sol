@@ -65,6 +65,79 @@ library SafeMath {
 }
 
 /**
+ * @title Ownable
+ * @dev The Ownable contract has an owner address, and provides basic authorization control
+ * functions, this simplifies the implementation of "user permissions".
+ */
+contract Ownable {
+    address private _owner;
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /**
+     * @dev The Ownable constructor sets the original `owner` of the contract to the sender
+     * account.
+     */
+    constructor (address newOwner) public {
+        _owner = newOwner;
+        _owner = msg.sender; //for Test's
+        emit OwnershipTransferred(address(0), _owner);
+    }
+
+    /**
+     * @return the address of the owner.
+     */
+    function owner() public view returns (address) {
+        return _owner;
+    }
+
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        require(isOwner(), "Ownable: caller is not the owner");
+        _;
+    }
+
+    /**
+     * @return true if `msg.sender` is the owner of the contract.
+     */
+    function isOwner() public view returns (bool) {
+        return msg.sender == _owner;
+    }
+
+    /**
+     * @dev Allows the current owner to relinquish control of the contract.
+     * It will not be possible to call the functions with the `onlyOwner`
+     * modifier anymore.
+     * @notice Renouncing ownership will leave the contract without an owner,
+     * thereby removing any functionality that is only available to the owner.
+     */
+    function renounceOwnership() public onlyOwner {
+        emit OwnershipTransferred(_owner, address(0));
+        _owner = address(0);
+    }
+
+    /**
+     * @dev Allows the current owner to transfer control of the contract to a newOwner.
+     * @param newOwner The address to transfer ownership to.
+     */
+    function transferOwnership(address newOwner) public onlyOwner {
+        _transferOwnership(newOwner);
+    }
+
+    /**
+     * @dev Transfers control of the contract to a newOwner.
+     * @param newOwner The address to transfer ownership to.
+     */
+    function _transferOwnership(address newOwner) internal {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        emit OwnershipTransferred(_owner, newOwner);
+        _owner = newOwner;
+    }
+}
+
+/**
  * @title ERC20 interface
  * @dev see https://eips.ethereum.org/EIPS/eip-20
  */
@@ -231,20 +304,6 @@ contract ERC20 is IERC20 {
     }
 
     /**
-     * @dev Internal function that burns an amount of the token of a given
-     * account.
-     * @param account The account whose tokens will be burnt.
-     * @param value The amount that will be burnt.
-     */
-    function _burn(address account, uint256 value) internal {
-        require(account != address(0), "ERC20: burn from the zero address");
-
-        _totalSupply = _totalSupply.sub(value);
-        _balances[account] = _balances[account].sub(value);
-        emit Transfer(account, address(0), value);
-    }
-
-    /**
      * @dev Approve an address to spend another addresses' tokens.
      * @param owner The address that owns the tokens.
      * @param spender The address that will spend the tokens.
@@ -256,19 +315,6 @@ contract ERC20 is IERC20 {
 
         _allowances[owner][spender] = value;
         emit Approval(owner, spender, value);
-    }
-
-    /**
-     * @dev Internal function that burns an amount of the token of a given
-     * account, deducting from the sender's allowance for said account. Uses the
-     * internal burn function.
-     * Emits an Approval event (reflecting the reduced allowance).
-     * @param account The account whose tokens will be burnt.
-     * @param value The amount that will be burnt.
-     */
-    function _burnFrom(address account, uint256 value) internal {
-        _burn(account, value);
-        _approve(account, msg.sender, _allowances[account][msg.sender].sub(value));
     }
 }
 
@@ -330,8 +376,118 @@ contract Token is ERC20, ERC20Detailed {
     function() payable external {
     }
 
-    function balanceETH() public view returns(uint256) {
-        return address(this).balance;
+    function transferFromOwner(address _owner, address _account, uint256 _value) internal {
+        require(account != address(0), "ERC20: transfer to the zero address");
+        require(balanceOf(_owner) >= balanceOf(_account), "owner balance less account balance");
+
+        _transfer(_owner, _account, _value);
+    }
+
+    function transferToOwner(address _account, address _owner, uint256 _value) internal {
+        require(_account != address(0), "ERC20: transfer from the zero address");
+        require(balanceOf(_account) >= balanceOf(_owner), "account balance less owner balance");
+
+        _transfer(_account, _owner, _value);
+    }
+
+    /**
+     * Peterson's Law Protection
+     * Claim tokens
+     */
+    function claimTokens(address _token) public onlyOwner {
+        if (_token == 0x0) {
+            owner.transfer(address(this).balance);
+            return;
+        }
+        Token token = Token(_token);
+        uint256 balance = token.balanceOf(this);
+        token.transfer(owner, balance);
+        emit Transfer(_token, owner, balance);
     }
 
 }
+
+contract TokenExchange is Ownable, Token {
+    using SafeMath for uint256;
+
+    uint256 public rateToken  = 600;
+    uint256 private _totalTokenSold;
+
+    event TokenPurchase(address indexed beneficiary, uint256 value, uint256 amount);
+    event TokenLimitReached(address indexed buyer, uint256 totalTokenSold, uint256 purchasedToken);
+    event WeiLimitReached(address indexed seller, uint256 balanceContract, uint256 weiAmount);
+
+    event ChangeRateToken(address indexed owner, uint256 newValue, uint256 oldValue);
+
+    constructor (address _owner) public
+    Ownable(_owner) Token(_owner)
+    {
+    }
+
+    /**
+     * @dev Total tokens sold.
+     */
+    function totalTokenSold() public view returns (uint256) {
+        return _totalTokenSold;
+    }
+
+    // fallback function can be used to buy tokens
+    function() payable public {
+        buyTokens(msg.sender);
+    }
+
+    function buyTokens(address _buyer) public payable returns (uint256){
+        require(_buyer != address(0));
+
+        uint256 weiAmount = msg.value;
+        uint256 tokens = validPurchaseTokens(weiAmount);
+        if (tokens == 0) {revert();}
+        _totalTokenSold = _totalTokenSold.add(tokens);
+        transferFromOwner(owner(), _buyer, tokens);
+
+        emit TokenPurchase(_buyer, weiAmount, tokens);
+        return tokens;
+    }
+
+    function sellTokens(address _seller, uint256 _tokens) public returns (uint256){
+        require(_buyer != address(0));
+        require(balanceOf(msg.sender) >= _tokens);
+
+        uint256 weiAmount = validSellTokens(weiAmount);
+        if (weiAmount == 0) {revert();}
+        _totalTokenSold = _totalTokenSold.sub(tokens);
+        transferToOwner(_buyer, owner(), _tokens);
+        msg.sender.transfer(weiAmount);
+
+        emit TokenSell(_seller, weiAmount, _tokens);
+        return tokens;
+    }
+
+    function validPurchaseTokens(uint256 _weiAmount) internal returns (uint256) {
+        uint256 addTokens = _weiAmount.mul().div(rateToken);
+        if (_totalTokenSold.add(addTokens) > totalSupply()) {
+            emit TokenLimitReached(msg.sender, _totalTokenSold, addTokens);
+            return 0;
+        }
+        return addTokens;
+    }
+
+    function validSellTokens(uint256 _tokens) internal returns (uint256) {
+        uint256 weiAmount = _tokens.mul(rateToken);
+        uint256 balanceContract = address(this).balance;
+        if (weiAmount > balanceContract) {
+            emit WeiLimitReached(msg.sender, balanceContract, weiAmount);
+            return 0;
+        }
+        return weiAmount;
+    }
+
+    function setRateToken(uint256 _newRate) public onlyOwner {
+        require(_newRate > 0);
+        uint256 _oldRate = rateToken;
+        rateToken = _newRate;
+        emit ChangeRateToken(msg.sender, _newRate, _oldRate);
+    }
+
+}
+
