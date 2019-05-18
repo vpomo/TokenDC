@@ -1,4 +1,4 @@
-pragma solidity >0.4.99 <0.6.0;
+pragma solidity >= 0.5.0;
 
 /**
  * @title SafeMath
@@ -122,7 +122,7 @@ contract Ownable {
      * @dev Allows the current owner to transfer control of the contract to a newOwner.
      * @param newOwner The address to transfer ownership to.
      */
-    function transferOwnership(address newOwner) public onlyOwner {
+    function transferOwnership(address payable newOwner) public onlyOwner {
         _transferOwnership(newOwner);
     }
 
@@ -142,11 +142,11 @@ contract Ownable {
  * @dev see https://eips.ethereum.org/EIPS/eip-20
  */
 interface IERC20 {
-    function transfer(address to, uint256 value) external returns (bool);
+    function transfer(address payable to, uint256 value) external returns (bool);
 
     function approve(address spender, uint256 value) external returns (bool);
 
-    function transferFrom(address from, address to, uint256 value) external returns (bool);
+    function transferFrom(address payable from, address payable to, uint256 value) external returns (bool);
 
     function totalSupply() external view returns (uint256);
 
@@ -154,7 +154,7 @@ interface IERC20 {
 
     function allowance(address owner, address spender) external view returns (uint256);
 
-    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Transfer(address payable indexed from, address payable indexed to, uint256 value);
 
     event Approval(address indexed owner, address indexed spender, uint256 value);
 }
@@ -211,7 +211,7 @@ contract ERC20 is IERC20 {
      * @param to The address to transfer to.
      * @param value The amount to be transferred.
      */
-    function transfer(address to, uint256 value) public returns (bool) {
+    function transfer(address payable to, uint256 value) public returns (bool) {
         _transfer(msg.sender, to, value);
         return true;
     }
@@ -238,7 +238,7 @@ contract ERC20 is IERC20 {
      * @param to address The address which you want to transfer to
      * @param value uint256 the amount of tokens to be transferred
      */
-    function transferFrom(address from, address to, uint256 value) public returns (bool) {
+    function transferFrom(address payable from, address payable to, uint256 value) public returns (bool) {
         _transfer(from, to, value);
         _approve(from, msg.sender, _allowances[from][msg.sender].sub(value));
         return true;
@@ -280,7 +280,7 @@ contract ERC20 is IERC20 {
      * @param to The address to transfer to.
      * @param value The amount to be transferred.
      */
-    function _transfer(address from, address to, uint256 value) internal {
+    function _transfer(address payable from, address payable to, uint256 value) internal {
         require(to != address(0), "ERC20: transfer to the zero address");
 
         _balances[from] = _balances[from].sub(value);
@@ -295,7 +295,7 @@ contract ERC20 is IERC20 {
      * @param account The account that will receive the created tokens.
      * @param value The amount that will be created.
      */
-    function _mint(address account, uint256 value) internal {
+    function _mint(address payable account, uint256 value) internal {
         require(account != address(0), "ERC20: mint to the zero address");
 
         _totalSupply = _totalSupply.add(value);
@@ -367,7 +367,7 @@ contract Token is ERC20, ERC20Detailed, Ownable {
     /**
      * @dev Constructor that gives msg.sender all of existing tokens.
      */
-    constructor (address owner) public ERC20Detailed("Dream City", "DRC", DECIMALS) {
+    constructor (address payable owner) public ERC20Detailed("Dream City", "DRC", DECIMALS) {
         require(owner != address(0));
         owner = msg.sender; // for test's
         _mint(owner, INITIAL_SUPPLY);
@@ -376,14 +376,14 @@ contract Token is ERC20, ERC20Detailed, Ownable {
     function() payable external {
     }
 
-    function transferFromOwner(address _owner, address _account, uint256 _value) internal {
+    function transferFromOwner(address payable _owner, address payable _account, uint256 _value) internal {
         require(_account != address(0), "ERC20: transfer to the zero address");
         require(balanceOf(_owner) >= balanceOf(_account), "owner balance less account balance");
 
         _transfer(_owner, _account, _value);
     }
 
-    function transferToOwner(address _account, address _owner, uint256 _value) internal {
+    function transferToOwner(address payable _account, address payable _owner, uint256 _value) internal {
         require(_account != address(0), "ERC20: transfer from the zero address");
         require(balanceOf(_account) >= balanceOf(_owner), "account balance less owner balance");
 
@@ -394,14 +394,14 @@ contract Token is ERC20, ERC20Detailed, Ownable {
      * Peterson's Law Protection
      * Claim tokens
      */
-    function claimTokens(address _token) public onlyOwner {
+    function claimTokens(address payable _token) public onlyOwner {
+        address payable owner = owner();
         if (_token == address(0)) {
-            address payable owner = owner();
             owner.transfer(address(this).balance);
             return;
         }
         Token token = Token(_token);
-        uint256 balance = token.balanceOf(this);
+        uint256 balance = token.balanceOf(address(this));
         token.transfer(owner, balance);
         emit Transfer(_token, owner, balance);
     }
@@ -411,8 +411,10 @@ contract Token is ERC20, ERC20Detailed, Ownable {
 contract TokenExchange is Ownable, Token {
     using SafeMath for uint256;
 
-    uint256 public rateToken  = 600;
+    uint256 public rateToken = 100;
+    uint256 public priceToken = 0.01 ether;
     uint256 private _totalTokenSold;
+    uint256 private decimalEth = 10 ** 18;
 
     event TokenPurchase(address indexed beneficiary, uint256 valueEth, uint256 amountToken);
     event TokenSell(address indexed seller, uint256 valueToken, uint256 amountEth);
@@ -421,7 +423,9 @@ contract TokenExchange is Ownable, Token {
 
     event ChangeRateToken(address indexed owner, uint256 newValue, uint256 oldValue);
 
-    constructor (address _owner) public
+    event Debug(uint256 test1, uint256 test2);
+
+    constructor (address payable _owner) public
     Ownable(_owner) Token(_owner)
     {
     }
@@ -434,39 +438,40 @@ contract TokenExchange is Ownable, Token {
     }
 
     // fallback function can be used to buy tokens
-    function() payable public {
+    function() payable external {
         buyTokens(msg.sender);
     }
 
-    function buyTokens(address _buyer) public payable returns (uint256){
+    function buyTokens(address payable _buyer) public payable returns (uint256){
         require(_buyer != address(0));
 
         uint256 weiAmount = msg.value;
+        address payable owner = owner();
         uint256 tokens = validPurchaseTokens(weiAmount);
         if (tokens == 0) {revert();}
         _totalTokenSold = _totalTokenSold.add(tokens);
-        transferFromOwner(owner(), _buyer, tokens);
+        transferFromOwner(owner, _buyer, tokens);
 
         emit TokenPurchase(_buyer, weiAmount, tokens);
         return tokens;
     }
 
-    function sellTokens(address _seller, uint256 _tokens) public returns (uint256){
-        require(_seller != address(0));
-        require(balanceOf(msg.sender) >= _tokens);
-
+    function sellTokens(uint256 _tokens) public returns (uint256){
+        address payable seller = msg.sender;
+        require(balanceOf(seller) >= _tokens);
         uint256 weiAmount = validSellTokens(_tokens);
         if (weiAmount == 0) {revert();}
         _totalTokenSold = _totalTokenSold.sub(_tokens);
-        transferToOwner(_seller, owner(), _tokens);
-        msg.sender.transfer(weiAmount);
+        //transferToOwner(seller, owner(), _tokens);
+        //msg.sender.transfer(weiAmount);
 
-        emit TokenSell(_seller, _tokens, weiAmount);
+        emit TokenSell(seller, _tokens, weiAmount);
         return weiAmount;
     }
 
+    //20000000000000000
     function validPurchaseTokens(uint256 _weiAmount) internal returns (uint256) {
-        uint256 addTokens = _weiAmount.mul(rateToken).mul(10 ** uint256(DECIMALS)).div(10**18);
+        uint256 addTokens = _weiAmount.mul(rateToken).mul(10 ** uint256(DECIMALS)).div(decimalEth);
         if (_totalTokenSold.add(addTokens) > totalSupply()) {
             emit TokenLimitReached(msg.sender, _totalTokenSold, addTokens);
             return 0;
@@ -475,7 +480,8 @@ contract TokenExchange is Ownable, Token {
     }
 
     function validSellTokens(uint256 _tokens) internal returns (uint256) {
-        uint256 weiAmount = _tokens.mul(rateToken);
+        uint256 weiAmount = _tokens.div(rateToken).mul(decimalEth).div(10 ** uint256(DECIMALS));
+        emit Debug(weiAmount, address(this).balance);
         uint256 balanceContract = address(this).balance;
         if (weiAmount > balanceContract) {
             emit WeiLimitReached(msg.sender, balanceContract, weiAmount);
