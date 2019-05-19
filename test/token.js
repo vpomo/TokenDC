@@ -6,8 +6,9 @@ contract('TokenExchange', (accounts) => {
     var owner = accounts[0]; // for test
     var decimalEth = Number(1e18);
     var decimalToken = Number(1e4);
+    var rate = 100;
 
-    var priceToken = 0.01*decimalEth;
+    var balanceContractToken = 10000*decimalToken;
 
     var buyEthOne = Number(0.02*decimalEth);
     var buyEthTwo = Number(0.025*decimalEth);
@@ -26,15 +27,14 @@ contract('TokenExchange', (accounts) => {
         assert.notEqual(undefined, contractSL.address);
     });
 
-    // it('verification balance contracts', async ()  => {
-    //     var totalSupply = await contractTimeToken.totalSupply.call();
-    //     //console.log(JSON.stringify(totalSupply));
-    //     assert.equal( 1e20, Number(totalSupply));
-    //
-    //     var balanceOwner = await contractTimeToken.balanceOf(owner);
-    //     //console.log("balanceOwner = " + balanceOwner);
-    //     assert.equal(Number(totalSupply), balanceOwner);
-    // });
+    it('verification balance of tokens contract', async ()  => {
+        var totalSupply = await contractSL.totalSupply.call();
+        assert.equal( balanceContractToken, Number(totalSupply));
+
+        var balanceOwner = await contractSL.balanceOf(owner);
+        //console.log("balanceOwner = " + Number(balanceOwner/decimalToken));
+        assert.equal(balanceContractToken, Number(balanceOwner));
+    });
 
     it('verification buy tokens', async ()  => {
         //await contractSL.setRateToken(priceToken);
@@ -43,80 +43,81 @@ contract('TokenExchange', (accounts) => {
 
         await contractSL.buyTokens(accounts[2],{from:accounts[2], value:buyEthOne});
         var totalTokenSoldAfter = await contractSL.totalTokenSold();
-        console.log(Number(totalTokenSoldBefore/decimalToken), Number(totalTokenSoldAfter/decimalToken));
+        //console.log(Number(totalTokenSoldBefore/decimalToken), Number(totalTokenSoldAfter/decimalToken));
 
-        // assert.isTrue(tokenAllocatedBefore < tokenAllocatedAfter);
-        // assert.equal(0, tokenAllocatedBefore);
+        assert.isTrue(Number(totalTokenSoldBefore) < Number(totalTokenSoldAfter));
+        assert.equal(0, Number(totalTokenSoldBefore));
+        assert.equal(2, Number(totalTokenSoldAfter/decimalToken));
 
         var balanceAccountTwoAfter = await contractSL.balanceOf(accounts[2]);
-        console.log("balanceAccountTwoAfter", Number(balanceAccountTwoAfter/decimalToken));
+        //console.log("balanceAccountTwoAfter", Number(balanceAccountTwoAfter/decimalToken));
+        assert.equal(2, Number(balanceAccountTwoAfter/decimalToken));
 
-        // assert.isTrue(balanceAccountTwoBefore < balanceAccountTwoAfter);
-        // assert.equal(0, balanceAccountTwoBefore);
-        // assert.equal(rate*buyWei, balanceAccountTwoAfter);
+        assert.equal(Number(rate*buyEthOne*decimalToken/decimalEth), Number(balanceAccountTwoAfter));
 
-        // var balanceAccountThreeBefore = await contract.balanceOf(accounts[3]);
-        // await contract.buyTokens(accounts[3],{from:accounts[3], value:buyWeiNew});
-        // var balanceAccountThreeAfter = await contract.balanceOf(accounts[3]);
-        // assert.isTrue(balanceAccountThreeBefore < balanceAccountThreeAfter);
-        // assert.equal(0, balanceAccountThreeBefore);
-        // assert.equal(rateNew*buyWeiNew, balanceAccountThreeAfter);
+        var balanceContractEth = await contractSL.balanceContractEth.call();
+        //console.log("balanceContractEth", Number(balanceContractEth/decimalEth));
+        assert.equal(0.02, Number(balanceContractEth/decimalEth));
 
-    });
+        var balanceContractEth = await contractSL.balanceContractEth.call();
+        //console.log("balanceContractEth", Number(balanceContractEth/decimalEth));
+        assert.equal(0.02, Number(balanceContractEth/decimalEth));
+
+});
 
     it('verification sell tokens', async ()  => {
-        //await contractSL.setRateToken(priceToken);
         var totalTokenSoldBefore = await contractSL.totalTokenSold();
         var balanceAccountTwoBefore = await contractSL.balanceOf(accounts[2]);
 
         await contractSL.sellTokens(sellTokenOne, {from:accounts[2]});
         var totalTokenSoldAfter = await contractSL.totalTokenSold();
-        console.log(Number(totalTokenSoldBefore/decimalToken), Number(totalTokenSoldAfter/decimalToken));
-
-        // assert.isTrue(tokenAllocatedBefore < tokenAllocatedAfter);
-        // assert.equal(0, tokenAllocatedBefore);
+        //console.log(Number(totalTokenSoldBefore/decimalToken), Number(totalTokenSoldAfter/decimalToken));
 
         var balanceAccountTwoAfter = await contractSL.balanceOf(accounts[2]);
-        console.log("balanceAccountTwoAfter", Number(balanceAccountTwoAfter/decimalToken));
+        //console.log("balanceAccountTwoAfter", Number(balanceAccountTwoAfter/decimalToken));
 
-        // assert.isTrue(balanceAccountTwoBefore < balanceAccountTwoAfter);
-        // assert.equal(0, balanceAccountTwoBefore);
-        // assert.equal(rate*buyWei, balanceAccountTwoAfter);
+        assert.isTrue(Number(totalTokenSoldBefore) > Number(totalTokenSoldAfter));
+        assert.equal(2, Number(totalTokenSoldBefore/decimalToken));
+        assert.equal(0, Number(totalTokenSoldAfter/decimalToken));
 
-        // var balanceAccountThreeBefore = await contract.balanceOf(accounts[3]);
-        // await contract.buyTokens(accounts[3],{from:accounts[3], value:buyWeiNew});
-        // var balanceAccountThreeAfter = await contract.balanceOf(accounts[3]);
-        // assert.isTrue(balanceAccountThreeBefore < balanceAccountThreeAfter);
-        // assert.equal(0, balanceAccountThreeBefore);
-        // assert.equal(rateNew*buyWeiNew, balanceAccountThreeAfter);
-        await contractSL.sdsdsd();
+        var balanceContractEth = await contractSL.balanceContractEth.call();
+        //console.log("balanceContractEth", Number(balanceContractEth/decimalEth));
+        assert.equal(0, Number(balanceContractEth/decimalEth));
+
+        assert.equal(Number((sellTokenOne/rate)*decimalEth/decimalToken), Number(buyEthOne));
+
+        //await contractSL.sdsdsd();
 
     });
 
-    /*
-
-        it('verification claim tokens', async ()  => {
-            var balanceAccountBefore = await contract.balanceOf(accounts[6]);
+        it('verification claim tokens and eth', async ()  => {
+            var balanceAccountBefore = await contractSL.balanceOf(accounts[6]);
             assert.equal(0, balanceAccountBefore);
-            await contract.buyTokens(accounts[6],{from:accounts[6], value:buyWei});
-            var balanceAccountAfter = await contract.balanceOf(accounts[6]);
+            await contractSL.buyTokens(accounts[6],{from:accounts[6], value:buyEthOne});
+            var balanceAccountAfter = await contractSL.balanceOf(accounts[6]);
+            assert.equal(2, Number(balanceAccountAfter/decimalToken));
 
-            await contract.addToWhitelist(accounts[6]);
-            await contract.addToWhitelist(contract.address);
-            await contract.addToWhitelist(accounts[0]);
+            await contractSL.transfer(contractSL.address, sellTokenOne, {from:accounts[6]});
+            var balanceContractBefore = await contractSL.balanceOf(contractSL.address);
+            assert.equal(2, Number(balanceContractBefore/decimalToken));
 
-            await contract.transfer(contract.address,balanceAccountAfter,{from:accounts[6]});
-            var balanceContractBefore = await contract.balanceOf(contract.address);
-            assert.equal(buyWei*rate, balanceContractBefore);
-            var balanceAccountAfterTwo = await contract.balanceOf(accounts[1]);
+            assert.equal(Number(rate*buyEthOne*decimalToken/decimalEth), Number(balanceAccountAfter));
+
+            var balanceAccountAfterTwo = await contractSL.balanceOf(accounts[6]);
             assert.equal(0, balanceAccountAfterTwo);
-            var balanceOwnerBefore = await contract.balanceOf(owner);
-            await contract.claimTokens(contract.address,{from:accounts[0]});
-            var balanceContractAfter = await contract.balanceOf(contract.address);
+
+            await contractSL.claim(contractSL.address,{from:accounts[0]});
+            var balanceContractAfter = await contractSL.balanceOf(contractSL.address);
             assert.equal(0, balanceContractAfter);
-            var balanceOwnerAfter = await contract.balanceOf(owner);
-            assert.equal(true, balanceOwnerBefore<balanceOwnerAfter);
+
+            var balanceContractEth = await contractSL.balanceContractEth.call();
+            //console.log("balanceContractEth", Number(balanceContractEth/decimalEth));
+            assert.equal(0.02, Number(balanceContractEth/decimalEth));
+
+            await contractSL.claim("0x0000000000000000000000000000000000000000",{from:accounts[0]});
+            balanceContractEth = await contractSL.balanceContractEth.call();
+            //console.log("balanceContractEth", Number(balanceContractEth/decimalEth));
+            assert.equal(0, Number(balanceContractEth/decimalEth));
         });
 
-    */
 });

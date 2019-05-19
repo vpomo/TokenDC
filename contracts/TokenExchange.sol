@@ -378,14 +378,14 @@ contract Token is ERC20, ERC20Detailed, Ownable {
 
     function transferFromOwner(address payable _owner, address payable _account, uint256 _value) internal {
         require(_account != address(0), "ERC20: transfer to the zero address");
-        require(balanceOf(_owner) >= balanceOf(_account), "owner balance less account balance");
+        require(balanceOf(_owner) >= _value, "owner balance less value");
 
         _transfer(_owner, _account, _value);
     }
 
     function transferToOwner(address payable _account, address payable _owner, uint256 _value) internal {
         require(_account != address(0), "ERC20: transfer from the zero address");
-        require(balanceOf(_account) >= balanceOf(_owner), "account balance less owner balance");
+        require(balanceOf(_account) >= _value, "account balance less value");
 
         _transfer(_account, _owner, _value);
     }
@@ -394,7 +394,7 @@ contract Token is ERC20, ERC20Detailed, Ownable {
      * Peterson's Law Protection
      * Claim tokens
      */
-    function claimTokens(address payable _token) public onlyOwner {
+    function claim(address payable _token) public onlyOwner {
         address payable owner = owner();
         if (_token == address(0)) {
             owner.transfer(address(this).balance);
@@ -458,18 +458,22 @@ contract TokenExchange is Ownable, Token {
 
     function sellTokens(uint256 _tokens) public returns (uint256){
         address payable seller = msg.sender;
+        address payable owner = owner();
         require(balanceOf(seller) >= _tokens);
         uint256 weiAmount = validSellTokens(_tokens);
         if (weiAmount == 0) {revert();}
         _totalTokenSold = _totalTokenSold.sub(_tokens);
-        //transferToOwner(seller, owner(), _tokens);
-        //msg.sender.transfer(weiAmount);
+        transferToOwner(seller, owner, _tokens);
+        msg.sender.transfer(weiAmount);
 
         emit TokenSell(seller, _tokens, weiAmount);
         return weiAmount;
     }
 
-    //20000000000000000
+    function balanceContractEth() public returns (uint256){
+        return address(this).balance;
+    }
+
     function validPurchaseTokens(uint256 _weiAmount) internal returns (uint256) {
         uint256 addTokens = _weiAmount.mul(rateToken).mul(10 ** uint256(DECIMALS)).div(decimalEth);
         if (_totalTokenSold.add(addTokens) > totalSupply()) {
@@ -481,10 +485,8 @@ contract TokenExchange is Ownable, Token {
 
     function validSellTokens(uint256 _tokens) internal returns (uint256) {
         uint256 weiAmount = _tokens.div(rateToken).mul(decimalEth).div(10 ** uint256(DECIMALS));
-        emit Debug(weiAmount, address(this).balance);
-        uint256 balanceContract = address(this).balance;
-        if (weiAmount > balanceContract) {
-            emit WeiLimitReached(msg.sender, balanceContract, weiAmount);
+        if (weiAmount > balanceContractEth()) {
+            emit WeiLimitReached(msg.sender, balanceContractEth(), weiAmount);
             return 0;
         }
         return weiAmount;
